@@ -406,7 +406,7 @@
           FSAE 制动动力学交互仿真台
           <span class="badge-3d">HIGH-PRECISION 3D</span>
         </h1>
-        <p>大一新生培训：轴荷转移、滑移率、推头/甩尾/车检抱死、ABS 18Hz点刹</p>
+        <p>大一新生培训：油门加速、轴荷转移、滑移率、推头/甩尾/车检抱死、ABS 18Hz点刹</p>
       </div>
     </div>
 
@@ -510,6 +510,14 @@
 
       <div class="slider-item">
         <div class="slider-top">
+          <span>油门开度 (后轮驱动 · 尾速 240km/h):</span>
+          <span id="txtThrottle" style="color:#34d399;">0 %</span>
+        </div>
+        <input type="range" id="slThrottle" min="0" max="100" value="0" oninput="updateThrottle(this.value)">
+      </div>
+
+      <div class="slider-item">
+        <div class="slider-top">
           <span>制动踏板开度 / 管路油压 p:</span>
           <span id="txtPedal">0 %</span>
         </div>
@@ -600,6 +608,8 @@ const CAR = {
   pitchK: 42000     // 悬架俯仰刚度
 };
 
+const VMAX = 66.67; // 尾速上限 240 km/h
+
 const sim = {
   x: 0,
   y: 0,
@@ -609,6 +619,9 @@ const sim = {
   pitch: 0,
   steerDeg: 0,
   pedal: 0,
+  throttle: 0,
+  aFwdG: 0,         // 纵向加速度(前向为正, 单位g), 驱动载荷后移
+  wheelSpin: 0,     // 后轮驱动打滑率(0~0.3)
   beta: 0.65,
   absOn: false,
   absPulsing: false,
@@ -671,8 +684,8 @@ function stepSimulation(rawDt) {
     }
   }
 
-  // 动态法向载荷转移 (PPT第5页公式)
-  const z = Math.min(2.2, Math.max(0, sim.decelG));
+  // 动态法向载荷转移 (PPT第5页公式; 加速时载荷后移 z<0, 制动时前移 z>0)
+  const z = Math.min(2.2, Math.max(-0.55, -sim.aFwdG));
   const dFz = (G * z * CAR.hg) / CAR.L;
   sim.Fz1 = Math.max(120, (G * CAR.b / CAR.L) + dFz + sim.Fdown * 0.48);
   sim.Fz2 = Math.max(80,  (G * CAR.a / CAR.L) - dFz + sim.Fdown * 0.52);
@@ -711,14 +724,30 @@ function stepSimulation(rawDt) {
   sim.Fx1 = updateAxle([0, 1], sim.Fz1, Fmu1);
   sim.Fx2 = updateAxle([2, 3], sim.Fz2, Fmu2);
 
-  // 纵向减速积分
+  // 纵向动力学: 油门驱动(后轮驱动, 制动优先) - 阻力/制动
   const totalFx = sim.Fx1 + sim.Fx2;
   const drag = sim.v > 0.2 ? (35 + 0.45 * sim.v * sim.v) : 0;
-  const ax = (totalFx + drag) / CAR.m;
+
+  const FdriveDemand = sim.pedal > 0.15 ? 0
+    : sim.throttle * Math.min(6500, 140000 / Math.max(sim.v, 6));
+  const maxDrive = Math.max(0, sim.Fz2 * 1.30 - sim.Fx2);
+  const Fdrive = Math.min(FdriveDemand, maxDrive);
+  sim.wheelSpin = FdriveDemand > 0
+    ? Math.min(0.30, (FdriveDemand - Fdrive) / FdriveDemand) : 0;
+
+  const aFwd = (Fdrive - totalFx - drag) / CAR.m;
+  sim.aFwdG = aFwd / CAR.g;
   sim.decelG = totalFx / G;
 
   if (sim.v > 0) {
-    sim.v = Math.max(0, sim.v - ax * dt);
+    sim.v = Math.min(VMAX, Math.max(0, sim.v + aFwd * dt));
+  }
+
+  // 油门加速时后轮跟随车速旋转, 抓地不足则空转(白色标记点转速超过车速)
+  if (sim.throttle > 0.05 && sim.pedal < 0.15) {
+    const wSpin = (sim.v * (1 + sim.wheelSpin)) / CAR.r;
+    sim.wheelOmega[2] = Math.max(sim.wheelOmega[2], wSpin);
+    sim.wheelOmega[3] = Math.max(sim.wheelOmega[3], wSpin);
   }
 
   // 横摆动力学 (区分推头、甩尾Spin与车检四轮抱死直线)
@@ -749,15 +778,15 @@ function stepSimulation(rawDt) {
   sim.x += sim.v * Math.cos(sim.yaw) * dt;
   sim.y += sim.v * Math.sin(sim.yaw) * dt;
 
-  // 记录胎印与抱死烟雾
-  if (sim.v > 1.0 && (sF > 0.35 || sR > 0.35)) {
-    sim.skids.push({ x: sim.x, y: sim.y, a: Math.max(sF, sR) });
+  // 记录胎印与抱死/打滑烟雾
+  if (sim.v > 1.0 && (sF > 0.35 || sR > 0.35 || sim.wheelSpin > 0.15)) {
+    sim.skids.push({ x: sim.x, y: sim.y, a: Math.max(sF, sR, sim.wheelSpin) });
     if (sim.skids.length > 200) sim.skids.shift();
 
     if (Math.random() > 0.45) {
       sim.smokes.push({
         lx: (Math.random() > 0.5 ? 1 : -1) * (CAR.track * 0.48),
-        ly: sF > sR ? CAR.a : -CAR.b,
+        ly: (sF > sR && sF > sim.wheelSpin) ? CAR.a : -CAR.b,
         lz: -CAR.r * 0.5,
         r: 7 + Math.random() * 8,
         alpha: 0.75
@@ -1325,6 +1354,17 @@ function refreshTelemetry() {
   } else if (sim.slip[0] > 0.75) {
     dot.style.background = '#fbbf24';
     lbl.innerText = '前轮抱死推头 (丧失转向能力 直线推向护墙)';
+  } else if (sim.throttle > 0.05 && sim.pedal < 0.15) {
+    if (sim.wheelSpin > 0.12) {
+      dot.style.background = '#ef4444';
+      lbl.innerText = '弹射起步：后轮打滑空转 (抓地不足, 油门' + Math.round(sim.throttle * 100) + '%)';
+    } else if (sim.v * 3.6 > 232) {
+      dot.style.background = '#fbbf24';
+      lbl.innerText = '极速巡航 240km/h (驱动功率与空气阻力平衡)';
+    } else {
+      dot.style.background = '#10b981';
+      lbl.innerText = '油门加速中 (后轮驱动 · 载荷后移增后轴抓地)';
+    }
   } else {
     dot.style.background = '#10b981';
     lbl.innerText = sim.pedal > 0 ? '线性平稳减速中' : `自由巡航中 (${sim.absOn ? 'ABS已开启' : 'ABS已关闭'})`;
@@ -1350,6 +1390,11 @@ function toggleAbs() {
   document.getElementById('txtAbs').innerText = sim.absOn ? 'ABS: 开启' : 'ABS: 关闭';
   document.getElementById('dotAbs').style.background = sim.absOn ? '#10b981' : '#64748b';
   document.getElementById('btnAbs').classList.toggle('active-green', sim.absOn);
+}
+
+function updateThrottle(v) {
+  sim.throttle = parseFloat(v) / 100;
+  document.getElementById('txtThrottle').innerText = v + ' %';
 }
 
 function updatePedal(v) {
@@ -1386,6 +1431,8 @@ function updateHg(v) {
 
 function fullBrakeNow() {
   if (sim.v < 2) sim.v = 18.0;
+  document.getElementById('slThrottle').value = 0;
+  updateThrottle(0);
   document.getElementById('slPedal').value = 95;
   updatePedal(95);
 }
@@ -1397,9 +1444,12 @@ function resetVehicle() {
   sim.pitch = 0;
   sim.wheelOmega = [73.1, 73.1, 73.1, 73.1];
   sim.slip = [0, 0, 0, 0];
+  sim.aFwdG = 0; sim.wheelSpin = 0;
   sim.skids = []; sim.smokes = [];
   R3D.skidPool.forEach(m => { m.visible = false; });
   R3D.lastSkidX = -10;
+  document.getElementById('slThrottle').value = 0;
+  updateThrottle(0);
   document.getElementById('slPedal').value = 0;
   document.getElementById('slSteer').value = 0;
   updatePedal(0);
