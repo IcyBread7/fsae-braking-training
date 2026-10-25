@@ -1,0 +1,1481 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FSAE 3D制动动力学与极限工况仿真台</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    :root {
+      --bg-page: #050811;
+      --bg-panel: #0b1120;
+      --bg-card: #111827;
+      --border-color: #1e293b;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg-page);
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+      padding: 16px;
+      line-height: 1.5;
+      overflow-x: hidden;
+    }
+    .main-wrapper {
+      max-width: 1280px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* 1. 顶部品牌与控制栏 (1:1还原截图样式) */
+    .top-header {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo-box {
+      width: 42px;
+      height: 42px;
+      background: linear-gradient(135deg, #ef4444, #991b1b);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35);
+    }
+    .title-group h1 {
+      font-size: 18px;
+      font-weight: 900;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .badge-3d {
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 8px;
+      border-radius: 6px;
+      background: rgba(239, 68, 68, 0.2);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      letter-spacing: 0.5px;
+    }
+    .title-group p {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    .controls-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+    .view-switcher {
+      background: #070b14;
+      border: 1px solid var(--border-color);
+      padding: 3px;
+      border-radius: 10px;
+      display: inline-flex;
+      gap: 4px;
+    }
+    .btn {
+      background: #161f33;
+      color: #cbd5e1;
+      border: 1px solid #26334d;
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn:hover { background: #1e293b; color: #fff; }
+    .view-switcher .btn {
+      border: none;
+      background: transparent;
+      padding: 6px 14px;
+    }
+    .view-switcher .btn.active {
+      background: #dc2626;
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(220, 38, 38, 0.45);
+    }
+    .btn-pill {
+      border-radius: 9px;
+      background: #131c31;
+    }
+    .btn-pill.active-amber {
+      background: rgba(245, 158, 11, 0.2);
+      border-color: #f59e0b;
+      color: #fbbf24;
+    }
+    .btn-pill.active-green {
+      background: rgba(16, 185, 129, 0.2);
+      border-color: #10b981;
+      color: #34d399;
+    }
+    .btn-danger {
+      background: #dc2626;
+      border-color: #ef4444;
+      color: #fff;
+      box-shadow: 0 2px 10px rgba(220, 38, 38, 0.35);
+    }
+    .btn-danger:hover { background: #ef4444; }
+    .dot-ind {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #64748b;
+    }
+
+    /* 2. 六大典型赛车极限工况卡片网格 (1:1还原截图样式) */
+    .presets-container {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 14px 18px;
+    }
+    .presets-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      font-size: 12px;
+    }
+    .presets-header .left-title {
+      font-weight: 800;
+      color: #e2e8f0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .presets-header .right-note {
+      color: #64748b;
+      font-size: 11px;
+    }
+    .presets-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+    @media (max-width: 900px) {
+      .presets-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    .preset-card {
+      background: #0d1526;
+      border: 1px solid #1e293b;
+      border-radius: 10px;
+      padding: 10px 14px;
+      cursor: pointer;
+      transition: all 0.18s;
+      text-align: left;
+    }
+    .preset-card:hover {
+      background: #152038;
+      border-color: #38bdf8;
+      transform: translateY(-1px);
+    }
+    .preset-card.active {
+      background: #172542;
+      border-color: #ef4444;
+      box-shadow: 0 0 12px rgba(239, 68, 68, 0.25);
+    }
+    .preset-title {
+      font-size: 12px;
+      font-weight: 800;
+      margin-bottom: 3px;
+    }
+    .preset-desc {
+      font-size: 11px;
+      color: #94a3b8;
+    }
+    .c-emerald { color: #10b981; }
+    .c-sky     { color: #38bdf8; }
+    .c-rose    { color: #f43f5e; }
+    .c-amber   { color: #fbbf24; }
+    .c-purple  { color: #c084fc; }
+    .c-teal    { color: #2dd4bf; }
+
+    /* 3. 3D 视窗与胶囊遥测外框 */
+    .stage-wrapper {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .telemetry-bar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+    .status-capsule {
+      background: #070b14;
+      border: 1px solid #1e293b;
+      padding: 6px 14px;
+      border-radius: 99px;
+      font-size: 12px;
+      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+    }
+    .metrics-capsule {
+      background: #070b14;
+      border: 1px solid #1e293b;
+      padding: 6px 16px;
+      border-radius: 99px;
+      font-size: 12px;
+      color: #94a3b8;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+    }
+    .metrics-capsule b {
+      font-family: monospace;
+      font-size: 13px;
+      margin: 0 2px;
+    }
+
+    /* 3D 画布固定高度容器，彻底杜绝 0 高度黑屏 */
+    .canvas-container {
+      width: 100%;
+      height: 430px;
+      background: #040710;
+      border: 1px solid #1a2438;
+      border-radius: 10px;
+      position: relative;
+      overflow: hidden;
+    }
+    #simCanvas3D {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    #simCanvas3D canvas { display: block; }
+    .webgl-fallback {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      color: #94a3b8;
+      text-align: center;
+      padding: 0 24px;
+    }
+    .canvas-overlay-note {
+      position: absolute;
+      bottom: 10px;
+      left: 14px;
+      background: rgba(11, 17, 32, 0.82);
+      border: 1px solid #1e293b;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 11px;
+      color: #cbd5e1;
+      pointer-events: none;
+      display: flex;
+      gap: 14px;
+    }
+
+    /* 4. 下方实时调参、前后轴滑移率、I/β曲线与轮缸推算面板 */
+    .bottom-panels {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr 1.1fr;
+      gap: 12px;
+    }
+    @media (max-width: 1024px) {
+      .bottom-panels { grid-template-columns: 1fr; }
+    }
+    .sub-card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .sub-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #f1f5f9;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .slider-item { margin-bottom: 10px; }
+    .slider-item:last-child { margin-bottom: 0; }
+    .slider-top {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #94a3b8;
+      margin-bottom: 4px;
+    }
+    input[type="range"] {
+      width: 100%;
+      height: 5px;
+      background: #1e293b;
+      border-radius: 4px;
+      accent-color: #ef4444;
+      cursor: pointer;
+    }
+    .axle-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .axle-card {
+      background: #070b14;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 8px 10px;
+    }
+    .axle-card.f { border-left: 3px solid #38bdf8; }
+    .axle-card.r { border-left: 3px solid #f43f5e; }
+    .slip-big {
+      font-size: 17px;
+      font-weight: 900;
+      font-family: monospace;
+      margin: 2px 0;
+    }
+    .mini-row { font-size: 11px; color: #64748b; }
+    .mini-row b { color: #e2e8f0; font-family: monospace; }
+
+    #curveCanvas {
+      width: 100%;
+      height: 155px;
+      background: #050811;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      display: block;
+    }
+    .calc-mini-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #1e293b;
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="main-wrapper">
+
+  <!-- 1. 顶部品牌与全局控制栏 -->
+  <div class="top-header">
+    <div class="brand-row">
+      <div class="logo-box">🏎️</div>
+      <div class="title-group">
+        <h1>
+          FSAE 制动动力学交互仿真台
+          <span class="badge-3d">HIGH-PRECISION 3D</span>
+        </h1>
+        <p>大一新生培训：轴荷转移、滑移率、推头/甩尾/车检抱死、ABS 18Hz点刹</p>
+      </div>
+    </div>
+
+    <div class="controls-row">
+      <div class="view-switcher">
+        <button id="btnChase" class="btn active" onclick="switchCam('chase')">追焦 3D</button>
+        <button id="btnSide" class="btn" onclick="switchCam('side')">侧视俯冲</button>
+        <button id="btnTop" class="btn" onclick="switchCam('top')">鸟瞰循迹</button>
+      </div>
+
+      <button id="btnSlow" class="btn btn-pill" onclick="toggleSlow()">
+        <span id="dotSlow" class="dot-ind" style="background:#f59e0b;"></span>
+        <span id="txtSlow">慢动作: 1.0x</span>
+      </button>
+
+      <button id="btnAbs" class="btn btn-pill" onclick="toggleAbs()">
+        <span id="dotAbs" class="dot-ind"></span>
+        <span id="txtAbs">ABS: 关闭</span>
+      </button>
+
+      <button class="btn btn-danger" onclick="fullBrakeNow()">一键全踩刹车</button>
+      <button class="btn btn-pill" onclick="resetVehicle()">复位赛车</button>
+    </div>
+  </div>
+
+  <!-- 2. 典型赛车极限工况一键直达 (6卡片网格) -->
+  <div class="presets-container">
+    <div class="presets-header">
+      <div class="left-title">⚡ 典型赛车极限工况一键直达 (点选即刻重现失稳与平衡)</div>
+      <div class="right-note">支持前轮抱死推头冲出赛道与后轮抱死甩尾陀螺自旋</div>
+    </div>
+
+    <div class="presets-grid">
+      <div id="card_1" class="preset-card" onclick="selectScenario(1)">
+        <div class="preset-title c-emerald">① 理想平稳制动</div>
+        <div class="preset-desc">80km/h 直线安全减速</div>
+      </div>
+
+      <div id="card_2" class="preset-card" onclick="selectScenario(2)">
+        <div class="preset-title c-sky">② 前轮抱死推头</div>
+        <div class="preset-desc">打死转向直线冲出赛道</div>
+      </div>
+
+      <div id="card_3" class="preset-card" onclick="selectScenario(3)">
+        <div class="preset-title c-rose">③ 后轮抱死甩尾</div>
+        <div class="preset-desc">3D 横摆 Spin 陀螺自旋</div>
+      </div>
+
+      <div id="card_4" class="preset-card" onclick="selectScenario(4)">
+        <div class="preset-title c-amber">④ 弯道循迹制动</div>
+        <div class="preset-desc">入弯摩擦椭圆分配博弈</div>
+      </div>
+
+      <div id="card_5" class="preset-card" onclick="selectScenario(5)">
+        <div class="preset-title c-purple">⑤ 120km/h 极速重刹</div>
+        <div class="preset-desc">巨大空气动力学下压力</div>
+      </div>
+
+      <div id="card_6" class="preset-card" onclick="selectScenario(6)">
+        <div class="preset-title c-teal">⑥ 车检四轮瞬间抱死</div>
+        <div class="preset-desc">FSAE规则 保持直线刹停</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. 胶囊状态栏 + 3D 赛车实时渲染舞台 -->
+  <div class="stage-wrapper">
+    <div class="telemetry-bar">
+      <div class="status-capsule">
+        <span id="statusDot" class="status-dot"></span>
+        <span id="statusLabel">自由巡航中 (ABS已关闭)</span>
+      </div>
+
+      <div class="metrics-capsule">
+        <span>车速 <b id="valSpeed" style="color:#fbbf24;">60.0</b> km/h</span> |
+        <span>减速度 <b id="valDecel" style="color:#f87171;">0.00</b> g</span> |
+        <span>前俯角 <b id="valPitch" style="color:#38bdf8;">0.00°</b></span> |
+        <span>偏航角速度 <b id="valYaw" style="color:#f472b6;">0.0</b> °/s</span>
+      </div>
+    </div>
+
+    <div class="canvas-container" id="stageBox">
+      <div id="simCanvas3D"></div>
+      <div class="canvas-overlay-note">
+        <span><b style="color:#38bdf8;">↑ 蓝色箭头</b>: 地面法向反作用力 Fz</span>
+        <span><b style="color:#ef4444;">← 红色箭头</b>: 地面制动力 Fxb</span>
+        <span><b style="color:#ffffff;">● 轮胎白点</b>: 滚动轮速与锁死定格指示</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. 底部三栏：参数控制 / 轴荷与滑移率+轮缸计算 / I-β曲线 -->
+  <div class="bottom-panels">
+
+    <!-- 左：操纵与制动参数调校 -->
+    <div class="sub-card">
+      <div class="sub-title">
+        <span>🎛️ 实时驾驶输入与结构参数</span>
+        <span id="lblPedal" style="color:#ef4444; font-family:monospace;">油压: 0.0 MPa</span>
+      </div>
+
+      <div class="slider-item">
+        <div class="slider-top">
+          <span>制动踏板开度 / 管路油压 p:</span>
+          <span id="txtPedal">0 %</span>
+        </div>
+        <input type="range" id="slPedal" min="0" max="100" value="0" oninput="updatePedal(this.value)">
+      </div>
+
+      <div class="slider-item">
+        <div class="slider-top">
+          <span>前轮转向角 (方向盘输入):</span>
+          <span id="txtSteer">0.0 °</span>
+        </div>
+        <input type="range" id="slSteer" min="-25" max="25" value="0" oninput="updateSteer(this.value)">
+      </div>
+
+      <div class="slider-item">
+        <div class="slider-top">
+          <span>前制动力分配系数 β (Fμ1/Fμ):</span>
+          <span id="txtBeta" style="color:#38bdf8;">0.65</span>
+        </div>
+        <input type="range" id="slBeta" min="0.38" max="0.85" step="0.01" value="0.65" oninput="updateBeta(this.value)">
+      </div>
+
+      <div class="slider-item">
+        <div class="slider-top">
+          <span>赛车质心高度 hg:</span>
+          <span id="txtHg">280 mm</span>
+        </div>
+        <input type="range" id="slHg" min="200" max="420" step="5" value="280" oninput="updateHg(this.value)">
+      </div>
+    </div>
+
+    <!-- 中：前后轴连续滑移率与轮缸直径推算 -->
+    <div class="sub-card">
+      <div class="sub-title">
+        <span>📊 轴荷转移与连续滑移率</span>
+        <span id="txtPhi0" style="color:#fbbf24; font-size:11px;">同步附着系数 φ0: 0.74</span>
+      </div>
+
+      <div class="axle-grid">
+        <div class="axle-card f">
+          <div style="font-size:11px; font-weight:700;">前轴 (Front)</div>
+          <div id="slipF" class="slip-big c-emerald">0.0 %</div>
+          <div class="mini-row">法向力 Fz1: <b id="fz1">1380</b> N</div>
+          <div class="mini-row">制动力 Fxb1: <b id="fx1">0</b> N</div>
+        </div>
+        <div class="axle-card r">
+          <div style="font-size:11px; font-weight:700;">后轴 (Rear)</div>
+          <div id="slipR" class="slip-big c-emerald">0.0 %</div>
+          <div class="mini-row">法向力 Fz2: <b id="fz2">1415</b> N</div>
+          <div class="mini-row">制动力 Fxb2: <b id="fx2">0</b> N</div>
+        </div>
+      </div>
+
+      <div class="calc-mini-grid">
+        <div>制动盘压紧力 N: <b id="calN" style="color:#fbbf24; font-family:monospace;">4210 N</b></div>
+        <div>四活塞推荐轮缸径 D: <b id="calD" style="color:#ef4444; font-family:monospace;">25.8 mm</b></div>
+      </div>
+    </div>
+
+    <!-- 右：I曲线与β线实时动态图 -->
+    <div class="sub-card">
+      <div class="sub-title">
+        <span>📈 I 曲线、β 线与实时工作点</span>
+        <span id="txtCurveHint" style="font-size:11px; color:#10b981;">β在I下方(前轮先抱)</span>
+      </div>
+      <canvas id="curveCanvas" width="360" height="155"></canvas>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+// ==================== 1. 车辆物理模型与状态 ====================
+const CAR = {
+  m: 285,           // 总质量 kg
+  g: 9.81,
+  L: 1.55,          // 轴距 m
+  b: 0.79,          // 质心距后轴 m
+  a: 0.76,          // 质心距前轴 m
+  hg: 0.28,         // 质心高度 m
+  r: 0.228,         // 轮胎半径 m
+  track: 1.20,      // 轮距 m
+  Iw: 0.52,         // 车轮转动惯量
+  muPeak: 1.35,     // 峰值附着系数
+  muSlide: 0.95,    // 抱死滑动附着系数
+  ClA: 2.5,         // 空力下压力系数
+  pitchK: 42000     // 悬架俯仰刚度
+};
+
+const sim = {
+  x: 0,
+  y: 0,
+  yaw: 0,
+  yawRate: 0,
+  v: 16.67,         // 60 km/h
+  pitch: 0,
+  steerDeg: 0,
+  pedal: 0,
+  beta: 0.65,
+  absOn: false,
+  absPulsing: false,
+  absClock: 0,
+  slowMo: false,
+  cam: 'chase',
+  wheelAng: [0, 0, 0, 0],
+  wheelOmega: [73.1, 73.1, 73.1, 73.1],
+  slip: [0, 0, 0, 0],
+  Fz1: 1380,
+  Fz2: 1415,
+  Fx1: 0,
+  Fx2: 0,
+  Fdown: 0,
+  decelG: 0,
+  skids: [],
+  smokes: []
+};
+
+const curveCanvas = document.getElementById('curveCanvas');
+const ctxCurve = curveCanvas.getContext('2d');
+
+// Pacejka 魔术公式连续滑移率曲线
+function tireMu(s) {
+  const slip = Math.max(0, Math.min(1, s));
+  if (slip <= 0.16) {
+    return CAR.muPeak * Math.sin(1.5708 * (slip / 0.16));
+  }
+  const t = (slip - 0.16) / 0.84;
+  return CAR.muPeak - (CAR.muPeak - CAR.muSlide) * Math.pow(t, 0.75);
+}
+
+// ==================== 2. 物理引擎步进 ====================
+let lastTick = performance.now();
+
+function stepSimulation(rawDt) {
+  const dt = sim.slowMo ? rawDt * 0.2 : rawDt;
+  const G = CAR.m * CAR.g;
+
+  // 空气动力学下压力
+  sim.Fdown = 0.5 * 1.225 * sim.v * sim.v * CAR.ClA;
+
+  // 制动器制动力需求
+  const maxBrakeF = 7800;
+  let Fmu1 = sim.pedal * maxBrakeF * sim.beta;
+  let Fmu2 = sim.pedal * maxBrakeF * (1 - sim.beta);
+
+  // ABS 18Hz 高频点刹控制
+  sim.absPulsing = false;
+  if (sim.absOn && sim.v > 0.8 && sim.pedal > 0.1) {
+    sim.absClock += dt;
+    const phase = (sim.absClock * 18) % 1.0;
+    if (sim.slip[0] > 0.14) {
+      Fmu1 = sim.Fz1 * CAR.muPeak * (phase < 0.5 ? 0.98 : 0.72);
+      sim.absPulsing = true;
+    }
+    if (sim.slip[2] > 0.14) {
+      Fmu2 = sim.Fz2 * CAR.muPeak * (phase < 0.5 ? 0.98 : 0.72);
+      sim.absPulsing = true;
+    }
+  }
+
+  // 动态法向载荷转移 (PPT第5页公式)
+  const z = Math.min(2.2, Math.max(0, sim.decelG));
+  const dFz = (G * z * CAR.hg) / CAR.L;
+  sim.Fz1 = Math.max(120, (G * CAR.b / CAR.L) + dFz + sim.Fdown * 0.48);
+  sim.Fz2 = Math.max(80,  (G * CAR.a / CAR.L) - dFz + sim.Fdown * 0.52);
+  sim.pitch = (dFz * CAR.L) / CAR.pitchK;
+
+  // 求解车轮角速度与连续滑移率
+  function updateAxle(idxPair, FzAxle, FmuAxle) {
+    const FzWheel = FzAxle * 0.5;
+    const TmuWheel = (FmuAxle * 0.5) * CAR.r;
+
+    idxPair.forEach(i => {
+      let w = sim.wheelOmega[i];
+      let vWheel = w * CAR.r;
+      let s = sim.v > 0.25 ? Math.max(0, Math.min(1, (sim.v - vWheel) / sim.v)) : 0;
+
+      if (sim.absOn && sim.pedal > 0.2 && sim.v > 0.8 && FmuAxle > FzAxle * 0.88) {
+        s = 0.15 + 0.02 * Math.sin(sim.absClock * 36 * Math.PI);
+        w = (sim.v * (1 - s)) / CAR.r;
+      } else {
+        const mu = tireMu(s);
+        const FxbWheel = Math.min(FmuAxle * 0.5, FzWheel * mu);
+        const netT = FxbWheel * CAR.r - TmuWheel;
+        w += (netT / CAR.Iw) * dt;
+        if (w < 0 || sim.v <= 0.08) w = 0;
+        s = sim.v > 0.25 ? Math.max(0, Math.min(1, (sim.v - w * CAR.r) / sim.v)) : 0;
+      }
+      sim.wheelOmega[i] = w;
+      sim.wheelAng[i] += w * dt;
+      sim.slip[i] = s;
+    });
+
+    const avgS = 0.5 * (sim.slip[idxPair[0]] + sim.slip[idxPair[1]]);
+    return Math.min(FmuAxle, FzAxle * tireMu(avgS));
+  }
+
+  sim.Fx1 = updateAxle([0, 1], sim.Fz1, Fmu1);
+  sim.Fx2 = updateAxle([2, 3], sim.Fz2, Fmu2);
+
+  // 纵向减速积分
+  const totalFx = sim.Fx1 + sim.Fx2;
+  const drag = sim.v > 0.2 ? (35 + 0.45 * sim.v * sim.v) : 0;
+  const ax = (totalFx + drag) / CAR.m;
+  sim.decelG = totalFx / G;
+
+  if (sim.v > 0) {
+    sim.v = Math.max(0, sim.v - ax * dt);
+  }
+
+  // 横摆动力学 (区分推头、甩尾Spin与车检四轮抱死直线)
+  const sF = 0.5 * (sim.slip[0] + sim.slip[1]);
+  const sR = 0.5 * (sim.slip[2] + sim.slip[3]);
+  const steerRad = (sim.steerDeg * Math.PI) / 180;
+  const latGripF = Math.max(0, Math.sqrt(Math.max(0, 1 - Math.pow(sF, 1.45))));
+
+  // 车检四轮抱死且未打方向时，严格保持直线不跑偏
+  if (Math.abs(sim.steerDeg) < 0.3 && (sF >= sR || (sF > 0.8 && sR > 0.8))) {
+    sim.yawRate = 0;
+  } else if (sim.v > 0.5) {
+    const FyF = latGripF * 3800 * steerRad;
+    let Mz = FyF * CAR.a;
+
+    // 后轮先抱死触发剧烈陀螺自旋 Spin
+    if (sR > 0.72 && sR > sF + 0.08) {
+      const dir = sim.steerDeg !== 0 ? Math.sign(sim.steerDeg) : 1;
+      Mz += dir * (CAR.m * sim.v * 2.2);
+    }
+    sim.yawRate += (Mz / 215) * dt;
+    sim.yawRate *= 0.93;
+  } else {
+    sim.yawRate = 0;
+  }
+
+  sim.yaw += sim.yawRate * dt;
+  sim.x += sim.v * Math.cos(sim.yaw) * dt;
+  sim.y += sim.v * Math.sin(sim.yaw) * dt;
+
+  // 记录胎印与抱死烟雾
+  if (sim.v > 1.0 && (sF > 0.35 || sR > 0.35)) {
+    sim.skids.push({ x: sim.x, y: sim.y, a: Math.max(sF, sR) });
+    if (sim.skids.length > 200) sim.skids.shift();
+
+    if (Math.random() > 0.45) {
+      sim.smokes.push({
+        lx: (Math.random() > 0.5 ? 1 : -1) * (CAR.track * 0.48),
+        ly: sF > sR ? CAR.a : -CAR.b,
+        lz: -CAR.r * 0.5,
+        r: 7 + Math.random() * 8,
+        alpha: 0.75
+      });
+    }
+  }
+
+  for (let i = sim.smokes.length - 1; i >= 0; i--) {
+    const sm = sim.smokes[i];
+    sm.ly -= sim.v * dt * 0.35;
+    sm.r += 15 * dt;
+    sm.alpha -= 1.3 * dt;
+    if (sm.alpha <= 0) sim.smokes.splice(i, 1);
+  }
+}
+
+// ==================== 3. Three.js 真实三维建模渲染引擎 ====================
+// 坐标映射: 世界X = 赛车前进方向, 世界Z = 侧向(sim.y), 车头朝本地 +X
+const R3D = {
+  renderer: null, scene: null, camera: null, dirLight: null,
+  carGroup: null, chassisGroup: null,
+  wheels: [],            // {steerG, spinG, tireMat, absDot}
+  fzArrows: [], fxArrows: [],
+  tireMatF: null, tireMatR: null,
+  skidPool: [], skidIdx: 0,
+  smokePool: [], lastSkidX: -10,
+  camTarget: null
+};
+
+function makeStripeTexture() {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 16;
+  const g = c.getContext('2d');
+  g.fillStyle = '#dc2626'; g.fillRect(0, 0, 32, 16);
+  g.fillStyle = '#e2e8f0'; g.fillRect(32, 0, 32, 16);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.repeat.set(420, 1);
+  return tex;
+}
+
+function makeSmokeTexture() {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 2, 32, 32, 30);
+  grad.addColorStop(0, 'rgba(235, 240, 245, 0.9)');
+  grad.addColorStop(0.5, 'rgba(200, 210, 220, 0.35)');
+  grad.addColorStop(1, 'rgba(200, 210, 220, 0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+}
+
+function buildTrack(scene) {
+  // 大地
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(600, 220),
+    new THREE.MeshLambertMaterial({ color: 0x070b13 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -0.02;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // 赛道沥青条
+  const asphalt = new THREE.Mesh(
+    new THREE.PlaneGeometry(600, 3.6),
+    new THREE.MeshLambertMaterial({ color: 0x101a2e })
+  );
+  asphalt.rotation.x = -Math.PI / 2;
+  asphalt.position.y = 0.0;
+  asphalt.receiveShadow = true;
+  scene.add(asphalt);
+
+  // 网格线
+  const grid = new THREE.GridHelper(600, 300, 0x1c2c4a, 0x101b30);
+  grid.material.transparent = true;
+  grid.material.opacity = 0.35;
+  grid.position.y = 0.015;
+  scene.add(grid);
+
+  // 红白路肩
+  const curbTex = makeStripeTexture();
+  [-1.925, 1.925].forEach(zPos => {
+    const curb = new THREE.Mesh(
+      new THREE.BoxGeometry(600, 0.035, 0.25),
+      new THREE.MeshLambertMaterial({ map: curbTex })
+    );
+    curb.position.set(0, 0.018, zPos);
+    curb.receiveShadow = true;
+    scene.add(curb);
+  });
+}
+
+function buildWing(w, h, d, color) {
+  const grp = new THREE.Group();
+  const plate = new THREE.Mesh(
+    new THREE.BoxGeometry(d, 0.022, w),
+    new THREE.MeshStandardMaterial({ color, metalness: 0.3, roughness: 0.5 })
+  );
+  plate.castShadow = true;
+  grp.add(plate);
+  [-w / 2, w / 2].forEach(z => {
+    const ep = new THREE.Mesh(
+      new THREE.BoxGeometry(d, h, 0.02),
+      new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.4, roughness: 0.5 })
+    );
+    ep.position.set(0, h / 2 - 0.01, z);
+    ep.castShadow = true;
+    grp.add(ep);
+  });
+  return grp;
+}
+
+function buildSuspensionArm(from, to, parent) {
+  const dir = new THREE.Vector3().subVectors(to, from);
+  const len = dir.length();
+  const mesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.012, 0.012, len, 6),
+    new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.6, roughness: 0.4 })
+  );
+  mesh.position.copy(from).add(to).multiplyScalar(0.5);
+  mesh.quaternion.setFromUnitVectors(
+    new THREE.Vector3(0, 1, 0),
+    dir.clone().normalize()
+  );
+  mesh.castShadow = true;
+  parent.add(mesh);
+}
+
+function buildCar(scene) {
+  R3D.carGroup = new THREE.Group();      // 整车: 平移 + 偏航
+  R3D.chassisGroup = new THREE.Group();  // 车身: 俯仰
+  R3D.carGroup.add(R3D.chassisGroup);
+  scene.add(R3D.carGroup);
+
+  const carbon = new THREE.MeshStandardMaterial({ color: 0x111827, metalness: 0.35, roughness: 0.55 });
+  const redMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, metalness: 0.3, roughness: 0.45 });
+
+  function addBox(w, h, d, x, y, z, mat) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z);
+    m.castShadow = true;
+    R3D.chassisGroup.add(m);
+    return m;
+  }
+
+  // 单体壳车身 (车头 +X)
+  addBox(1.35, 0.10, 0.62, 0, 0.13, 0, carbon);                 // 底板
+  addBox(0.62, 0.20, 0.50, -0.05, 0.26, 0, carbon);             // 驾驶舱桶
+  const nose = addBox(0.55, 0.09, 0.26, 0.82, 0.16, 0, redMat); // 鼻锥
+  nose.scale.set(1, 1, 0.8);
+  addBox(0.30, 0.06, 0.14, 1.12, 0.17, 0, redMat);              // 鼻尖
+
+  // 侧箱
+  [0.36, -0.36].forEach(z => {
+    addBox(0.72, 0.17, 0.16, -0.12, 0.16, z, carbon);
+  });
+
+  // 车手头盔 + 转向盘
+  const helmet = new THREE.Mesh(
+    new THREE.SphereGeometry(0.115, 20, 16),
+    new THREE.MeshStandardMaterial({ color: 0xfbbf24, metalness: 0.15, roughness: 0.35 })
+  );
+  helmet.position.set(-0.05, 0.42, 0);
+  helmet.castShadow = true;
+  R3D.chassisGroup.add(helmet);
+  const wheelStub = addBox(0.04, 0.10, 0.20, 0.28, 0.34, 0,
+    new THREE.MeshStandardMaterial({ color: 0x0f172a }));
+  wheelStub.rotation.z = 0.5;
+
+  // 主环
+  const hoopBar = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.022, 0.022, 0.52, 8),
+    new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.7, roughness: 0.3 })
+  );
+  hoopBar.position.set(-0.32, 0.48, 0);
+  hoopBar.rotation.x = Math.PI / 2;
+  hoopBar.castShadow = true;
+  R3D.chassisGroup.add(hoopBar);
+  [-0.26, 0.26].forEach(z => {
+    const post = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.016, 0.016, 0.34, 8),
+      new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.7, roughness: 0.3 })
+    );
+    post.position.set(-0.32, 0.33, z);
+    post.castShadow = true;
+    R3D.chassisGroup.add(post);
+  });
+
+  // 前翼 (红色) / 尾翼 (蓝色, 带支柱)
+  const fWing = buildWing(1.24, 0.07, 0.30, 0xdc2626);
+  fWing.position.set(1.28, 0.085, 0);
+  R3D.chassisGroup.add(fWing);
+
+  const rWing = buildWing(1.14, 0.14, 0.26, 0x0ea5e9);
+  rWing.position.set(-0.92, 0.60, 0);
+  R3D.chassisGroup.add(rWing);
+  [-0.18, 0.18].forEach(z => {
+    const pylon = new THREE.Mesh(
+      new THREE.BoxGeometry(0.05, 0.30, 0.03),
+      new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.5, roughness: 0.4 })
+    );
+    pylon.position.set(-0.92, 0.42, z);
+    pylon.castShadow = true;
+    R3D.chassisGroup.add(pylon);
+  });
+
+  // 四轮 (转向组 > 自旋组 > 轮胎/轮毂/白点标记)
+  R3D.tireMatF = new THREE.MeshStandardMaterial({ color: 0x0b0f1a, roughness: 0.9 });
+  R3D.tireMatR = new THREE.MeshStandardMaterial({ color: 0x0b0f1a, roughness: 0.9 });
+  const wheelDefs = [
+    { x: CAR.a, z: 0.60, front: true },   // FL (左前, z+)
+    { x: CAR.a, z: -0.60, front: true },  // FR
+    { x: -CAR.b, z: 0.60, front: false }, // RL
+    { x: -CAR.b, z: -0.60, front: false } // RR
+  ];
+
+  wheelDefs.forEach(def => {
+    const steerG = new THREE.Group();
+    steerG.position.set(def.x, CAR.r, def.z);
+    R3D.carGroup.add(steerG);
+
+    const spinG = new THREE.Group();
+    steerG.add(spinG);
+
+    const tire = new THREE.Mesh(
+      new THREE.CylinderGeometry(CAR.r, CAR.r, 0.17, 24),
+      def.front ? R3D.tireMatF : R3D.tireMatR
+    );
+    tire.rotation.x = Math.PI / 2;   // 轮轴指向侧向 Z
+    tire.castShadow = true;
+    spinG.add(tire);
+
+    const hub = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.095, 0.095, 0.175, 16),
+      new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.7, roughness: 0.35 })
+    );
+    hub.rotation.x = Math.PI / 2;
+    spinG.add(hub);
+
+    // 轮胎白色转速标记点 (抱死时定格)
+    [0.72, -0.72].forEach(f => {
+      const dot = new THREE.Mesh(
+        new THREE.BoxGeometry(0.05, 0.05, 0.02),
+        new THREE.MeshBasicMaterial({ color: 0xffffff })
+      );
+      dot.position.set(0, CAR.r * f, 0.095 * Math.sign(def.z));
+      spinG.add(dot);
+    });
+
+    // ABS 点刹指示灯
+    const absDot = new THREE.Mesh(
+      new THREE.SphereGeometry(0.045, 10, 8),
+      new THREE.MeshBasicMaterial({ color: 0x10b981 })
+    );
+    absDot.position.set(0, CAR.r * 0.9, 0.1 * Math.sign(def.z));
+    absDot.visible = false;
+    steerG.add(absDot);
+
+    R3D.wheels.push({ steerG, spinG, absDot, front: def.front });
+
+    // 悬挂推杆
+    buildSuspensionArm(
+      new THREE.Vector3(def.x * 0.55, 0.16, def.z * 0.4),
+      new THREE.Vector3(def.x, CAR.r, def.z * 0.86),
+      R3D.carGroup
+    );
+  });
+
+  // 三维力矢量箭头: Fz 蓝色朝上, Fxb 红色朝后
+  wheelDefs.forEach(def => {
+    const fz = new THREE.ArrowHelper(
+      new THREE.Vector3(0, 1, 0),
+      new THREE.Vector3(def.x, 0.02, def.z), 1.0, 0x38bdf8, 0.16, 0.09
+    );
+    R3D.carGroup.add(fz);
+    R3D.fzArrows.push({ arrow: fz, front: def.front, x: def.x, z: def.z });
+
+    const fx = new THREE.ArrowHelper(
+      new THREE.Vector3(-1, 0, 0),
+      new THREE.Vector3(def.x, 0.05, def.z), 0.8, 0xef4444, 0.15, 0.09
+    );
+    fx.visible = false;
+    R3D.carGroup.add(fx);
+    R3D.fxArrows.push({ arrow: fx, front: def.front, x: def.x, z: def.z });
+  });
+}
+
+function buildPools(scene) {
+  // 胎印池
+  const skidGeo = new THREE.PlaneGeometry(0.14, 0.42);
+  for (let i = 0; i < 240; i++) {
+    const m = new THREE.Mesh(skidGeo, new THREE.MeshBasicMaterial({
+      color: 0x04060b, transparent: true, opacity: 0.65, depthWrite: false
+    }));
+    m.rotation.x = -Math.PI / 2;
+    m.visible = false;
+    scene.add(m);
+    R3D.skidPool.push(m);
+  }
+  // 烟雾精灵池
+  const smokeTex = makeSmokeTexture();
+  for (let i = 0; i < 48; i++) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: smokeTex, transparent: true, opacity: 0, depthWrite: false
+    }));
+    sp.visible = false;
+    scene.add(sp);
+    R3D.smokePool.push(sp);
+  }
+}
+
+function initThree() {
+  const box = document.getElementById('stageBox');
+  const host = document.getElementById('simCanvas3D');
+
+  if (typeof THREE === 'undefined') {
+    host.innerHTML = '<div class="webgl-fallback">3D 引擎 (Three.js) 加载失败——预览和 GitHub Pages 需要联网；本地使用可将 three.min.js 下载后内联。</div>';
+    return false;
+  }
+
+  try {
+    R3D.renderer = new THREE.WebGLRenderer({ antialias: true });
+  } catch (e) {
+    host.innerHTML = '<div class="webgl-fallback">当前环境不支持 WebGL，无法渲染 3D 视窗。</div>';
+    return false;
+  }
+  R3D.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  R3D.renderer.setSize(box.clientWidth, box.clientHeight);
+  R3D.renderer.shadowMap.enabled = true;
+  R3D.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  host.appendChild(R3D.renderer.domElement);
+
+  R3D.scene = new THREE.Scene();
+  R3D.scene.background = new THREE.Color(0x040814);
+  R3D.scene.fog = new THREE.Fog(0x050a16, 32, 130);
+
+  R3D.camera = new THREE.PerspectiveCamera(55, box.clientWidth / box.clientHeight, 0.1, 400);
+  R3D.camera.position.set(-5.2, 1.9, 3);
+  R3D.camTarget = new THREE.Vector3(0, 0.4, 0);
+
+  R3D.scene.add(new THREE.HemisphereLight(0x3b4c6b, 0x0a0e18, 0.85));
+  R3D.dirLight = new THREE.DirectionalLight(0xffffff, 0.95);
+  R3D.dirLight.position.set(6, 12, 4);
+  R3D.dirLight.castShadow = true;
+  R3D.dirLight.shadow.mapSize.set(1024, 1024);
+  const sc = R3D.dirLight.shadow.camera;
+  sc.left = -7; sc.right = 7; sc.top = 7; sc.bottom = -7; sc.far = 40;
+  R3D.scene.add(R3D.dirLight);
+  R3D.scene.add(R3D.dirLight.target);
+
+  buildTrack(R3D.scene);
+  buildCar(R3D.scene);
+  buildPools(R3D.scene);
+  return true;
+}
+
+function fitCanvases() {
+  const box = document.getElementById('stageBox');
+  if (!box || !R3D.renderer) return;
+  const rect = box.getBoundingClientRect();
+  if (rect.width > 100 && rect.height > 100) {
+    R3D.renderer.setSize(Math.floor(rect.width), Math.floor(rect.height));
+    R3D.camera.aspect = rect.width / rect.height;
+    R3D.camera.updateProjectionMatrix();
+  }
+}
+window.addEventListener('resize', fitCanvases);
+
+const _v1 = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
+const _colLock = new THREE.Color(0x7f1d1d);
+const _colFree = new THREE.Color(0x0b0f1a);
+
+function render3DStage(dt) {
+  if (!R3D.renderer) return;
+  const sF = 0.5 * (sim.slip[0] + sim.slip[1]);
+  const sR = 0.5 * (sim.slip[2] + sim.slip[3]);
+
+  // 整车位姿: 平移 + 偏航; 车身俯仰
+  R3D.carGroup.position.set(sim.x, 0, sim.y);
+  R3D.carGroup.rotation.y = -sim.yaw;
+  R3D.chassisGroup.rotation.z = -sim.pitch;
+
+  // 车轮: 转向 + 自旋 + 抱死发热变红 + ABS 灯
+  const steerRad = sim.steerDeg * Math.PI / 180;
+  R3D.wheels.forEach((w, i) => {
+    w.steerG.rotation.y = w.front ? -steerRad : 0;
+    w.spinG.rotation.z = -sim.wheelAng[i];
+    w.absDot.visible = sim.absOn && sim.absPulsing;
+  });
+  R3D.tireMatF.color.copy(_colFree).lerp(_colLock, Math.min(1, Math.max(0, (sF - 0.5) * 2.2)));
+  R3D.tireMatR.color.copy(_colFree).lerp(_colLock, Math.min(1, Math.max(0, (sR - 0.5) * 2.2)));
+
+  // 力矢量箭头长度
+  R3D.fzArrows.forEach(a => {
+    const fz = (a.front ? sim.Fz1 : sim.Fz2) * 0.5;
+    a.arrow.setLength(Math.max(0.06, Math.min(2.2, (fz / 1400) * 1.15)), 0.16, 0.09);
+  });
+  R3D.fxArrows.forEach(a => {
+    const fx = (a.front ? sim.Fx1 : sim.Fx2) * 0.5;
+    a.arrow.visible = fx > 40;
+    if (fx > 40) a.arrow.setLength(Math.max(0.08, Math.min(2.0, (fx / 1400) * 1.2)), 0.15, 0.09);
+  });
+
+  // 胎印 (按前进距离间隔落点)
+  if (sim.v > 1.0 && (sF > 0.35 || sR > 0.35) && sim.x - R3D.lastSkidX > 0.22) {
+    R3D.lastSkidX = sim.x;
+    const cy = Math.cos(-sim.yaw), sy = Math.sin(-sim.yaw);
+    [0.60, -0.60].forEach(lz => {
+      const m = R3D.skidPool[R3D.skidIdx % R3D.skidPool.length];
+      R3D.skidIdx++;
+      const lx = sF > sR ? CAR.a : -CAR.b;
+      // 本地(车头+X) -> 世界
+      m.position.set(sim.x + lx * cy + lz * sy, 0.025, sim.y - lx * sy + lz * cy);
+      m.rotation.z = -sim.yaw;
+      m.material.opacity = 0.35 + 0.4 * Math.max(sF, sR);
+      m.visible = true;
+    });
+  }
+
+  // 抱死烟雾
+  for (let i = 0; i < R3D.smokePool.length; i++) {
+    const sp = R3D.smokePool[i];
+    const sm = sim.smokes[i];
+    if (sm) {
+      const cy = Math.cos(-sim.yaw), sy = Math.sin(-sim.yaw);
+      sp.position.set(sim.x + sm.ly * cy + sm.lx * sy, CAR.r * 0.55, sim.y - sm.ly * sy + sm.lx * cy);
+      const sc = sm.r / 14;
+      sp.scale.set(sc, sc, sc);
+      sp.material.opacity = Math.max(0, sm.alpha * 0.5);
+      sp.visible = sm.alpha > 0;
+    } else {
+      sp.visible = false;
+    }
+  }
+
+  // 相机 (世界轴固定, 能观察到横摆自旋)
+  const cp = R3D.carGroup.position;
+  let desired, look;
+  if (sim.cam === 'side') {
+    desired = _v1.set(cp.x - 0.4, 0.85, cp.z + 5.2);
+    look = _v2.set(cp.x + 0.3, 0.35, cp.z);
+  } else if (sim.cam === 'top') {
+    desired = _v1.set(cp.x + 0.4, 8.6, cp.z + 1.4);
+    look = _v2.set(cp.x, 0, cp.z);
+  } else {
+    desired = _v1.set(cp.x - 5.4, 1.95, cp.z + 1.5);
+    look = _v2.set(cp.x + 1.6, 0.35, cp.z);
+  }
+  const k = 1 - Math.exp(-5.5 * dt);
+  R3D.camera.position.lerp(desired, k);
+  R3D.camTarget.lerp(look, k);
+  R3D.camera.lookAt(R3D.camTarget);
+
+  // 平行光跟随赛车 (保持阴影有效)
+  R3D.dirLight.position.set(cp.x + 6, 12, cp.z + 4);
+  R3D.dirLight.target.position.set(cp.x, 0, cp.z);
+  R3D.dirLight.target.updateMatrixWorld();
+
+  R3D.renderer.render(R3D.scene, R3D.camera);
+}
+
+// ==================== 4. I曲线与β线绘制 ====================
+function renderCurves() {
+  const W = curveCanvas.width;
+  const H = curveCanvas.height;
+  ctxCurve.clearRect(0, 0, W, H);
+
+  const pL = 32, pR = 10, pT = 10, pB = 20;
+  const gW = W - pL - pR, gH = H - pT - pB;
+  const maxX = 4800, maxY = 2600;
+  const mapX = f1 => pL + (f1 / maxX) * gW;
+  const mapY = f2 => pT + gH - (f2 / maxY) * gH;
+  const G = CAR.m * CAR.g;
+
+  // 等减速度线
+  ctxCurve.strokeStyle = '#1e293b';
+  ctxCurve.lineWidth = 1;
+  for (let phi = 0.4; phi <= 1.6; phi += 0.4) {
+    const tot = phi * (G + sim.Fdown);
+    ctxCurve.beginPath();
+    ctxCurve.moveTo(mapX(0), mapY(tot));
+    ctxCurve.lineTo(mapX(tot), mapY(0));
+    ctxCurve.stroke();
+  }
+
+  // 理想 I 曲线 (亮蓝)
+  ctxCurve.strokeStyle = '#38bdf8';
+  ctxCurve.lineWidth = 2.2;
+  ctxCurve.beginPath();
+  for (let phi = 0; phi <= 1.75; phi += 0.05) {
+    const fz1 = G * (CAR.b + phi * CAR.hg) / CAR.L + sim.Fdown * 0.48;
+    const fz2 = G * (CAR.a - phi * CAR.hg) / CAR.L + sim.Fdown * 0.52;
+    if (fz2 >= 0) {
+      const x = mapX(phi * fz1), y = mapY(phi * fz2);
+      if (phi === 0) ctxCurve.moveTo(x, y); else ctxCurve.lineTo(x, y);
+    }
+  }
+  ctxCurve.stroke();
+
+  // 实际 β 线 (红色)
+  ctxCurve.strokeStyle = '#ef4444';
+  ctxCurve.lineWidth = 2;
+  ctxCurve.beginPath();
+  ctxCurve.moveTo(mapX(0), mapY(0));
+  const f1End = 4500;
+  ctxCurve.lineTo(mapX(f1End), mapY(f1End * (1 - sim.beta) / sim.beta));
+  ctxCurve.stroke();
+
+  // 当前工作点
+  ctxCurve.fillStyle = '#fbbf24';
+  ctxCurve.beginPath();
+  ctxCurve.arc(mapX(sim.Fx1), mapY(sim.Fx2), 4.5, 0, Math.PI * 2);
+  ctxCurve.fill();
+}
+
+// ==================== 5. 遥测数据与轮缸计算刷新 ====================
+function refreshTelemetry() {
+  document.getElementById('valSpeed').innerText = (sim.v * 3.6).toFixed(1);
+  document.getElementById('valDecel').innerText = sim.decelG.toFixed(2);
+  document.getElementById('valPitch').innerText = (sim.pitch * 180 / Math.PI).toFixed(2) + '°';
+  document.getElementById('valYaw').innerText = Math.abs(sim.yawRate * 180 / Math.PI).toFixed(1);
+
+  const sF = (sim.slip[0] * 100).toFixed(1);
+  const sR = (sim.slip[2] * 100).toFixed(1);
+  const elF = document.getElementById('slipF');
+  const elR = document.getElementById('slipR');
+  elF.innerText = sF + ' %';
+  elR.innerText = sR + ' %';
+  elF.className = 'slip-big ' + (sF < 10 ? 'c-emerald' : (sF < 25 ? 'c-amber' : 'c-rose'));
+  elR.className = 'slip-big ' + (sR < 10 ? 'c-emerald' : (sR < 25 ? 'c-amber' : 'c-rose'));
+
+  document.getElementById('fz1').innerText = Math.round(sim.Fz1);
+  document.getElementById('fz2').innerText = Math.round(sim.Fz2);
+  document.getElementById('fx1').innerText = Math.round(sim.Fx1);
+  document.getElementById('fx2').innerText = Math.round(sim.Fx2);
+
+  // 第四章轮缸压紧力与活塞直径实时联动反算
+  const singleFrontTorque = Math.max(320, (sim.Fx1 * 0.5) * CAR.r);
+  const clampN = singleFrontTorque / (2 * 0.38 * 0.095);
+  const pistonF = clampN / 2;
+  const areaM2 = pistonF / (5.5 * 1e6);
+  const diaMM = 2 * Math.sqrt(areaM2 / Math.PI) * 1000;
+  document.getElementById('calN').innerText = Math.round(clampN) + ' N';
+  document.getElementById('calD').innerText = diaMM.toFixed(1) + ' mm';
+
+  // 状态胶囊文字
+  const dot = document.getElementById('statusDot');
+  const lbl = document.getElementById('statusLabel');
+  if (sim.v <= 0.1) {
+    dot.style.background = '#94a3b8';
+    lbl.innerText = '已完全刹停 (点选工况或复位再次发车)';
+  } else if (sim.absOn && sim.absPulsing) {
+    dot.style.background = '#10b981';
+    lbl.innerText = 'ABS 18Hz高频点刹中 (锁定15%峰值滑移率)';
+  } else if (sim.slip[2] > 0.72 && sim.slip[2] > sim.slip[0] + 0.08) {
+    dot.style.background = '#ef4444';
+    lbl.innerText = '危险：后轮先抱死！剧烈横摆甩尾 (Spin)';
+  } else if (sim.slip[0] > 0.78 && sim.slip[2] > 0.78) {
+    dot.style.background = '#2dd4bf';
+    lbl.innerText = 'FSAE车检工况：四轮同时抱死 直线刹停';
+  } else if (sim.slip[0] > 0.75) {
+    dot.style.background = '#fbbf24';
+    lbl.innerText = '前轮抱死推头 (丧失转向能力 直线推向护墙)';
+  } else {
+    dot.style.background = '#10b981';
+    lbl.innerText = sim.pedal > 0 ? '线性平稳减速中' : `自由巡航中 (${sim.absOn ? 'ABS已开启' : 'ABS已关闭'})`;
+  }
+}
+
+// ==================== 6. 交互控制与六大工况直达 ====================
+function switchCam(c) {
+  sim.cam = c;
+  document.getElementById('btnChase').classList.toggle('active', c === 'chase');
+  document.getElementById('btnSide').classList.toggle('active', c === 'side');
+  document.getElementById('btnTop').classList.toggle('active', c === 'top');
+}
+
+function toggleSlow() {
+  sim.slowMo = !sim.slowMo;
+  document.getElementById('txtSlow').innerText = sim.slowMo ? '慢动作: 0.2x' : '慢动作: 1.0x';
+  document.getElementById('btnSlow').classList.toggle('active-amber', sim.slowMo);
+}
+
+function toggleAbs() {
+  sim.absOn = !sim.absOn;
+  document.getElementById('txtAbs').innerText = sim.absOn ? 'ABS: 开启' : 'ABS: 关闭';
+  document.getElementById('dotAbs').style.background = sim.absOn ? '#10b981' : '#64748b';
+  document.getElementById('btnAbs').classList.toggle('active-green', sim.absOn);
+}
+
+function updatePedal(v) {
+  sim.pedal = parseFloat(v) / 100;
+  document.getElementById('txtPedal').innerText = v + ' %';
+  document.getElementById('lblPedal').innerText = '油压: ' + (sim.pedal * 7.5).toFixed(1) + ' MPa';
+}
+
+function updateSteer(v) {
+  sim.steerDeg = parseFloat(v);
+  document.getElementById('txtSteer').innerText = sim.steerDeg.toFixed(1) + ' °';
+}
+
+function updateBeta(v) {
+  sim.beta = parseFloat(v);
+  document.getElementById('txtBeta').innerText = sim.beta.toFixed(2);
+  const phi0 = (CAR.L * sim.beta - CAR.b) / CAR.hg;
+  document.getElementById('txtPhi0').innerText = '同步附着系数 φ0: ' + phi0.toFixed(2);
+  const hint = document.getElementById('txtCurveHint');
+  if (sim.beta >= 0.61) {
+    hint.innerText = 'β在I下方(前轮先抱·稳定)';
+    hint.style.color = '#10b981';
+  } else {
+    hint.innerText = 'β在I上方(后轮先抱·甩尾)';
+    hint.style.color = '#ef4444';
+  }
+}
+
+function updateHg(v) {
+  CAR.hg = parseFloat(v) / 1000;
+  document.getElementById('txtHg').innerText = v + ' mm';
+  updateBeta(sim.beta);
+}
+
+function fullBrakeNow() {
+  if (sim.v < 2) sim.v = 18.0;
+  document.getElementById('slPedal').value = 95;
+  updatePedal(95);
+}
+
+function resetVehicle() {
+  sim.v = 16.67;
+  sim.x = 0; sim.y = 0;
+  sim.yaw = 0; sim.yawRate = 0;
+  sim.pitch = 0;
+  sim.wheelOmega = [73.1, 73.1, 73.1, 73.1];
+  sim.slip = [0, 0, 0, 0];
+  sim.skids = []; sim.smokes = [];
+  R3D.skidPool.forEach(m => { m.visible = false; });
+  R3D.lastSkidX = -10;
+  document.getElementById('slPedal').value = 0;
+  document.getElementById('slSteer').value = 0;
+  updatePedal(0);
+  updateSteer(0);
+}
+
+function selectScenario(id) {
+  for (let i = 1; i <= 6; i++) {
+    document.getElementById('card_' + i).classList.toggle('active', i === id);
+  }
+  resetVehicle();
+
+  if (id === 1) {
+    // ① 理想平稳制动
+    sim.v = 22.2; // 80 km/h
+    document.getElementById('slBeta').value = 0.66; updateBeta(0.66);
+    document.getElementById('slPedal').value = 48; updatePedal(48);
+  } else if (id === 2) {
+    // ② 前轮抱死推头
+    sim.absOn = false;
+    document.getElementById('txtAbs').innerText = 'ABS: 关闭';
+    document.getElementById('btnAbs').classList.remove('active-green');
+    document.getElementById('slBeta').value = 0.80; updateBeta(0.80);
+    document.getElementById('slSteer').value = 22; updateSteer(22);
+    document.getElementById('slPedal').value = 78; updatePedal(78);
+  } else if (id === 3) {
+    // ③ 后轮抱死甩尾 Spin
+    sim.absOn = false;
+    document.getElementById('txtAbs').innerText = 'ABS: 关闭';
+    document.getElementById('btnAbs').classList.remove('active-green');
+    document.getElementById('slBeta').value = 0.42; updateBeta(0.42);
+    document.getElementById('slSteer').value = 8; updateSteer(8);
+    document.getElementById('slPedal').value = 76; updatePedal(76);
+  } else if (id === 4) {
+    // ④ 弯道循迹制动
+    document.getElementById('slBeta').value = 0.64; updateBeta(0.64);
+    document.getElementById('slSteer').value = 15; updateSteer(15);
+    document.getElementById('slPedal').value = 42; updatePedal(42);
+  } else if (id === 5) {
+    // ⑤ 120km/h 极速重刹
+    sim.v = 33.33; // 120 km/h
+    document.getElementById('slBeta').value = 0.66; updateBeta(0.66);
+    document.getElementById('slPedal').value = 95; updatePedal(95);
+  } else if (id === 6) {
+    // ⑥ 车检四轮瞬间抱死
+    sim.absOn = false;
+    document.getElementById('txtAbs').innerText = 'ABS: 关闭';
+    document.getElementById('btnAbs').classList.remove('active-green');
+    document.getElementById('slBeta').value = 0.68; updateBeta(0.68);
+    document.getElementById('slSteer').value = 0; updateSteer(0);
+    document.getElementById('slPedal').value = 98; updatePedal(98);
+  }
+}
+
+let threeReady = false;
+function loop(now) {
+  const dt = Math.min(0.05, Math.max(0.001, (now - lastTick) / 1000));
+  lastTick = now;
+  stepSimulation(dt);
+  render3DStage(dt);
+  renderCurves();
+  refreshTelemetry();
+  requestAnimationFrame(loop);
+}
+
+threeReady = initThree();
+fitCanvases();
+requestAnimationFrame(loop);
+
+// 看门狗: 某些内嵌视图/后台标签会停摆 requestAnimationFrame，
+// 检测到循环卡死时改用定时器驱动，保证仿真不冻结
+setInterval(() => {
+  if (performance.now() - lastTick > 400) {
+    loop(performance.now());
+  }
+}, 60);
+</script>
+</body>
+</html>
