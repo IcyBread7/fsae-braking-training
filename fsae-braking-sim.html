@@ -841,44 +841,128 @@ function makeSmokeTexture() {
   return new THREE.CanvasTexture(c);
 }
 
+function makeRingTexture() {
+  // 环形赛道整圈贴图: 沥青 + 内外两圈红白路肩 + 中心虚线圆
+  const S = 1024, half = S / 2, pxPerM = half / 37.05;
+  const c = document.createElement('canvas');
+  c.width = S; c.height = S;
+  const g = c.getContext('2d');
+  g.fillStyle = '#101a2e';
+  g.beginPath(); g.arc(half, half, 37.05 * pxPerM, 0, Math.PI * 2); g.fill();
+  const step = Math.PI / 20;   // 每段 9°
+  [[32.95, 33.2], [36.8, 37.05]].forEach(([r0, r1]) => {
+    for (let i = 0; i < 40; i++) {
+      g.fillStyle = i % 2 ? '#e2e8f0' : '#dc2626';
+      g.beginPath();
+      g.arc(half, half, r1 * pxPerM, i * step, (i + 1) * step);
+      g.arc(half, half, r0 * pxPerM, (i + 1) * step, i * step, true);
+      g.closePath(); g.fill();
+    }
+  });
+  g.strokeStyle = '#94a3b8';
+  g.lineWidth = 2.5;
+  for (let i = 0; i < 40; i += 2) {
+    g.beginPath();
+    g.arc(half, half, 35 * pxPerM, i * step + 0.12, (i + 1) * step - 0.12);
+    g.stroke();
+  }
+  return new THREE.CanvasTexture(c);
+}
+
+function makeCheckerTexture() {
+  const c = document.createElement('canvas');
+  c.width = 16; c.height = 64;
+  const g = c.getContext('2d');
+  for (let x = 0; x < 2; x++)
+    for (let y = 0; y < 8; y++) {
+      g.fillStyle = (x + y) % 2 ? '#0d1526' : '#e2e8f0';
+      g.fillRect(x * 8, y * 8, 8, 8);
+    }
+  return new THREE.CanvasTexture(c);
+}
+
 function buildTrack(scene) {
+  const STRAIGHT_LEN = 2400, CX = 1000;            // 直线赛道: x ∈ [-200, 2200]
+  const RING_CX = 600, RING_CZ = 45, RING_R = 35;  // 环形赛道圆心与中线半径
+
   // 大地
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(600, 220),
+    new THREE.PlaneGeometry(STRAIGHT_LEN + 400, 260),
     new THREE.MeshLambertMaterial({ color: 0x070b13 })
   );
   ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -0.02;
+  ground.position.set(CX, -0.02, RING_CZ / 2);
   ground.receiveShadow = true;
   scene.add(ground);
 
-  // 赛道沥青条
+  // 直线赛道沥青 (2400m 长直线)
   const asphalt = new THREE.Mesh(
-    new THREE.PlaneGeometry(600, 3.6),
+    new THREE.PlaneGeometry(STRAIGHT_LEN, 3.6),
     new THREE.MeshLambertMaterial({ color: 0x101a2e })
   );
   asphalt.rotation.x = -Math.PI / 2;
-  asphalt.position.y = 0.0;
+  asphalt.position.set(CX, 0, 0);
   asphalt.receiveShadow = true;
   scene.add(asphalt);
 
   // 网格线
-  const grid = new THREE.GridHelper(600, 300, 0x1c2c4a, 0x101b30);
+  const grid = new THREE.GridHelper(STRAIGHT_LEN + 400, 700, 0x1c2c4a, 0x101b30);
   grid.material.transparent = true;
   grid.material.opacity = 0.35;
-  grid.position.y = 0.015;
+  grid.position.set(CX, 0.015, RING_CZ / 2);
   scene.add(grid);
 
-  // 红白路肩
+  // 直道红白路肩
   const curbTex = makeStripeTexture();
+  curbTex.repeat.set(STRAIGHT_LEN / 0.8, 1);
   [-1.925, 1.925].forEach(zPos => {
     const curb = new THREE.Mesh(
-      new THREE.BoxGeometry(600, 0.035, 0.25),
+      new THREE.BoxGeometry(STRAIGHT_LEN, 0.035, 0.25),
       new THREE.MeshLambertMaterial({ map: curbTex })
     );
-    curb.position.set(0, 0.018, zPos);
+    curb.position.set(CX, 0.018, zPos);
     curb.receiveShadow = true;
     scene.add(curb);
+  });
+
+  // 起点黑白格线 (x=0)
+  const startLine = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.9, 3.6),
+    new THREE.MeshBasicMaterial({ map: makeCheckerTexture() })
+  );
+  startLine.rotation.x = -Math.PI / 2;
+  startLine.position.set(0, 0.016, 0);
+  scene.add(startLine);
+
+  // 环形赛道 (半径35m, 宽3.6m, 整圈一张贴图)
+  const ringTex = makeRingTexture();
+  if (R3D.renderer) ringTex.anisotropy = R3D.renderer.capabilities.getMaxAnisotropy();
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(RING_R - 2.05, RING_R + 2.05, 128),
+    new THREE.MeshLambertMaterial({ map: ringTex })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(RING_CX, 0.006, RING_CZ);
+  ring.receiveShadow = true;
+  scene.add(ring);
+
+  // 连接道: 直道边缘(z≈1.9) ↔ 环道边缘(z≈8.1)
+  const linkLen = 6.4, linkCenterZ = (1.9 + 8.3) / 2;
+  const link = new THREE.Mesh(
+    new THREE.PlaneGeometry(3.6, linkLen),
+    new THREE.MeshLambertMaterial({ color: 0x101a2e })
+  );
+  link.rotation.x = -Math.PI / 2;
+  link.position.set(RING_CX, 0.005, linkCenterZ);
+  scene.add(link);
+  [-1.74, 1.74].forEach(dx => {
+    const edge = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.1, linkLen),
+      new THREE.MeshBasicMaterial({ color: 0xe2e8f0 })
+    );
+    edge.rotation.x = -Math.PI / 2;
+    edge.position.set(RING_CX + dx, 0.008, linkCenterZ);
+    scene.add(edge);
   });
 }
 
